@@ -1,19 +1,26 @@
-#import importlib.util
-#import tweepy
 from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler
 from tweepy import Stream
 import tweepy
 import wget
 import hashlib
-import symmetry
+# import symmetry
 import requests
 import os
+import io
+import time
+import datetime
+from datetime import date
+
+# from google.cloud import vision
+# from google.cloud.vision import types
 
 import numpy as np
 import pandas as pd
 import twitter_credentials
 
+### TWITTER CLIENT ###
+#In charge of all activities performed on twitter account
 class TwitterClient():
     def __init__(self, user=None):
         self.auth = Authentication().authenticate()
@@ -21,28 +28,56 @@ class TwitterClient():
 
         self.user = user
 
-    def get_twitter_client_api(self):
+    def get_twitter_client_api(self):#retrieves api to use rest of function
         return self.api
 
-    def getUserTweets(self, num_tweets):
+    def getUserTweets(self, num_tweets):#get most recent num_tweets number of tweets by self
         userTweets = []
         for tweet in Cursor(self.api.user_timeline, id=self.user).items(num_tweets):
             userTweets.append(tweet)
         return userTweets
 
-    def getFriendList(self, num_friends):
+    def getFriendList(self, num_friends):#get list of followers
         friendList = []
         for friend in Cursor(self.twitter_client.friends, id=self.user).items(num_friends):
             friendList.append(friend)
         return friendList
 
-    def getTimelineTweets(self, num_tweets):
+    def getTimelineTweets(self, num_tweets):#Get tweets from timeline
         timelineTweets = []
         for tweet in Cursor(self.twitter_client.home_timeline, id=self.user).items(num_tweets):
             timelineTweets.append(tweet)
         return timelineTweets
 
-    def tweet_image(self, url, message=""):
+    def get_mentions(self, num_tweets):#Get mentions of user on timeline
+        lst = []
+        tweets = api.mentions_timeline(count = num_tweets)
+
+        for tweet in tweets:
+            lst.append(tweet)
+        return lst
+
+    def get_in_reply_to(self, tweets):#get the original tweet a tweet is replying to
+        lst = []
+        for tweet in tweets:
+            lst.append(tweet.in_reply_to_status_id)
+        return lst
+
+    def get_images_mentioned(self, num_tweets):#get image of tweet a tweet is replying to
+        images = get_images(get_in_reply_to(get_mentions(num_tweets)))
+        return images
+
+    def get_images(self, tweets):#get image of tweets
+        media_files = []
+        for status in tweets:
+            media = status.entities.get('media', [])
+            if(len(media) > 0):
+                media_files.append(media[0]['media_url'])
+        return media_files
+
+
+
+    def tweet_image(self, url, message=""):#Tweet the image associated to the link
 
         filename = 'temp.jpg'
         request = requests.get(url, stream=True)
@@ -55,6 +90,14 @@ class TwitterClient():
             os.remove(filename)
         else:
             print("Unable to download image")
+
+
+    def delete_tweets(self, num_tweets):#Deletes the most recent tweets of user
+        my_tweets = api.user_timeline(count=num_tweets)
+
+        for tweet in my_tweets:
+            api.destroy_status(tweet.id)
+
 
 #### TWITTER AUTHENTICATOR ####
 class Authentication():
@@ -110,40 +153,42 @@ class TweetAnalyzer():
 
 if __name__ == "__main__":
 
-    # logger = plugin_api.getLogger()
-    # config = plugin_api.config.secret.symmetrify
-    # spec = importlib.util.spec_from_file_location("symmetry", os.path.join(os.path.dirname(os.path.abspath(__file__)), "symmetry.py"))
-    # mod = importlib.util.module_from_spec(spec)
-    # spec.loader.exec_module(mod)
-    # sym = mod.Symmetry(api_key=config["cloudvision_key"], save_dir=plugin_api.dirs.cache, logger=logger)
-
     twitter_client = TwitterClient()
     tweet_analyzer = TweetAnalyzer()
     api = twitter_client.get_twitter_client_api()
 
-    tweets = api.user_timeline(screen_name='GhibliQuotes', count=15, include_rts=False)
+    # df = tweet_analyzer.tweets_to_data_frame(tweets)
+    # print(df.head(10))
+    # print(dir(tweets[0]))
 
-    df = tweet_analyzer.tweets_to_data_frame(tweets)
-    #print(df.head(40))
-    #print(dir(tweets[0]))
+    while True:
+        if datetime.datetime.now().hour == 0 or datetime.datetime.now().hour == 12 or datetime.datetime.now().hour == 18:
+            tweets = api.user_timeline(screen_name='GhibliQuotes', count=3, include_rts=False)
+            media_files = []
+            for status in tweets:
+                media = status.entities.get('media', [])
+                if(len(media) > 0):
+                    media_files.append(media[0]['media_url'])
+            for i in media_files:
+                twitter_client.tweet_image(i)
 
-    media_files = []
-    for status in tweets:
-        media = status.entities.get('media', [])
-        if(len(media) > 0):
-            media_files.append(media[0]['media_url'])
-            #media_files.append(media[0]['media_url_https'])
-            #media_files.append(media[0]['media_id_string'])
+            print ('sleeping ... ', datetime.datetime.now())
+            time.sleep(3600)
+
+        else:
+            print('sleeping ...', datetime.datetime.now())
+            time.sleep(1)
 
 
-    for i in media_files:
-        print(i)
-        twitter_client.tweet_image(i)
+
+
+
 
         #wget.download(i)
 
+### Work in progress to use face detection and edit an image ###
 
-    #symmetrify = symmetry.Symmetry('nWPANwUxEQ3GtQpoyCnxhv084')
+    # symmetrify = symmetry.Symmetry('nWPANwUxEQ3GtQpoyCnxhv084')
     # for pictures in media_files:
     #     text = ""
     #     # hashed_url = hashlib.md5(pictures.encode()).hexdigest()
@@ -155,68 +200,3 @@ if __name__ == "__main__":
     #         text = ""
     #         media_ids = [api.media_upload(m).media_id_string for m in n]
     #         api.update_status(status=text, media_ids=media_ids)
-
-
-    #print(dir(tweets[0]))
-
-
-
-
-
-
-    # hash_tag_list = ["ghibli", "coding", "python", "c++", "ssbu"]
-    # fetched_tweets_filename = "tweets.txt"
-    #
-    # twitterStreamer = TwitterStreamer()
-    # twitterStreamer.stream_tweets(fetched_tweets_filename, hash_tag_list)
-
-"""
-api = tweepy.API(auth)
-
-user = api.get_user('hikakin')
-
-mentions = api.mentions_timeline(count = 1) ##class status
-
-if mentions:
-
-
-print(user.screen_name)
-print(user.followers_count)
-"""
-
-
-#def do(api, stream):
-    #logger = api.getLogger()
-    #config = api.config.secret.symmetrify
-    #twitter = api.getTwitterAccount("symmetrify").getTweepyHandler(retry_count=5, retry_delay=10)
-    #spec = importlib.util.spec_from_file_location("symmetry", os.path.join(os.path.dirname(os.path.abspath(__file__)), "symmetry.py"))
-    #mod = importlib.util.module_from_spec(spec)
-    #spec.loader.exec_module(mod)
-    #sym = mod.Symmetry(api_key=config["cloudvision_key"], save_dir= api.dirs.cache, logger=logger)
-
-    # if stream["user"]["screen_name"].lower() == "hikakin"
-    #     result = stream.get("extended_entities", stream.get("entities", {})).get("media")
-    #     if result is not None:
-    #         logger.info("Twitter found a new image")
-    #         for i in result:
-    #             img_url = i.get("media_url_https")
-    #
-    #             if img_url is not None:
-    #                 #sym_result = sym.do(img_url)
-    #                 for c, n in enumerate(img_url):    #sym_result):
-    #                     text = ""
-    #                     media_ids = [api.media_upload(m).media_id_string for m in n]
-    #                     api.update_status(status=text, media_ids=media_ids)
-    #                 [[os.remove(m) for m in n if os.path.exists(m)] for n in sym_result]
-    #
-    #     else:
-    #         logger.info("No image found!!!!!!")
-
-
-
-
-#@PluginMeta(PluginType.TwitterTimeline, twitterAccount='')
-#def do(plugin_api, stream):
-#    logger = plugin_api.getLogger()
-#    config = plugin_api.config.secret.###
-#    twitter = plugin_api.getTwitterAccount('').getTweepyHandler()
